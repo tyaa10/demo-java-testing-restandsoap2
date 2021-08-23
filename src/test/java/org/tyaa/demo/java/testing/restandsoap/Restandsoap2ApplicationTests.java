@@ -1,6 +1,7 @@
 package org.tyaa.demo.java.testing.restandsoap;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
@@ -69,20 +70,36 @@ class Restandsoap2ApplicationTests {
 	@Order(1)
 	void givenNewAuthor_whenCreateRequest_thenCreated() throws ParseException, JsonProcessingException {
 		LocalDate birthDate = getCorrectAuthorBirthDate();
+		Long id = getNextAuthorId();
 		AuthorDto newAuthorDto = AuthorDto.builder()
-			.authorId(getNextAuthorId())
+			.authorId(id)
 			.authorName(NameDto.builder().first(CORRECT_AUTHOR_NAME).second(CORRECT_AUTHOR_LAST_NAME).build())
 			.birth(BirthDto.builder().date(birthDate).country("Russia").city("Moscow").build())
 			.authorDescription("-")
 			.nationality("Russian")
 				.build();
-		given()
+		/* given()
 			.header("Content-Type", "application/json")
 			.body(new ObjectMapper().writeValueAsString(newAuthorDto))
 		.when()
 			.post(BASE_URL + "/author")
 		.then()
-			.assertThat().statusCode(201);
+			.assertThat().statusCode(201)
+			// .assertThat().body("authorId", equalTo(id))
+			.assertThat().body("authorName.first", equalTo(CORRECT_AUTHOR_NAME))
+			.assertThat().body("authorName.second", equalTo(CORRECT_AUTHOR_LAST_NAME)); */
+		Response response =
+			given()
+				.header("Content-Type", "application/json")
+				.body(new ObjectMapper().writeValueAsString(newAuthorDto))
+			.when()
+				.post(BASE_URL + "/author");
+		assertEquals(201, response.getStatusCode());
+		AuthorDto authorDto =
+			response.jsonPath().getObject("$", AuthorDto.class);
+		assertEquals(newAuthorDto.getAuthorId(), authorDto.getAuthorId());
+		assertEquals(newAuthorDto.getAuthorName().getFirst(), authorDto.getAuthorName().getFirst());
+		assertEquals(newAuthorDto.getAuthorName().getSecond(), authorDto.getAuthorName().getSecond());
 	}
 
 	@Test
@@ -154,9 +171,17 @@ class Restandsoap2ApplicationTests {
 	@Test
 	@Order(8)
 	void givenNotExistingAuthorId_whenRequestForDelete_thenNotFoundFail() {
+		Long wrongId = getNextAuthorId();
 		given()
-			.when().delete(BASE_URL + "/author/" + getNextAuthorId())
-			.then().assertThat().statusCode(404);
+			.when().delete(BASE_URL + "/author/" + wrongId)
+			.then()
+				.assertThat().statusCode(404)
+				.assertThat().body("statusCode", equalTo(404))
+				.assertThat().body("error", equalTo("Not Found"))
+				.assertThat().body(
+					"errorMessage",
+						equalTo(String.format("Author with 'authorId' = '%d' doesn't exist!", wrongId))
+		);
 	}
 
 	private static Long getNextAuthorId() {
